@@ -1,0 +1,7 @@
+{
+  "name": "Traverse",
+  "entry": "python src/main.py",
+  "players": [1],
+  "cover_art": "assets/cover.png",
+  "theme_song": null
+}
