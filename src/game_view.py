@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import arcade
+import numpy as np
 
 from src.config import (
     SCREEN_WIDTH, SCREEN_HEIGHT, HOLD_TO_QUIT_SECONDS,
@@ -17,8 +18,8 @@ from src.entities import EntityManager
 from src.map_data import (
     LEVEL_1, LEVEL_1_WIDTH, LEVEL_1_HEIGHT,
     PLAYER_START_X, PLAYER_START_Y, PLAYER_START_ANGLE,
-    PORTAL_X, PORTAL_Y,
-    find_emitters, Tile,
+    PORTAL_X, PORTAL_Y, TRIGGERS,
+    find_emitters,
 )
 
 
@@ -32,6 +33,7 @@ class GameView(arcade.View):
         self.world_map = LEVEL_1
         self.map_w = LEVEL_1_WIDTH
         self.map_h = LEVEL_1_HEIGHT
+        self.map_array = np.array(LEVEL_1, dtype=np.intp)
 
         self.player = Player(PLAYER_START_X, PLAYER_START_Y, PLAYER_START_ANGLE)
 
@@ -49,6 +51,7 @@ class GameView(arcade.View):
         self.esc_held = 0.0
 
         self.phase = "maze"
+        self.won = False
         self.death_timer = 0.0
         self.win_timer = 0.0
 
@@ -77,10 +80,15 @@ class GameView(arcade.View):
         arcade.set_background_color((0, 0, 0))
 
     def on_key_press(self, key, modifiers):
+        # ESC always means hold-to-quit, even on the death/win screens.
+        if key == arcade.key.ESCAPE:
+            self.esc_pressed = True
+            return
+
         if not self.player.alive and self.death_timer > 0.5:
             self._restart()
             return
-        if self.player.won and self.win_timer > 0.5:
+        if self.won and self.win_timer > 0.5:
             self.window.close()
             return
 
@@ -96,8 +104,6 @@ class GameView(arcade.View):
             self.turn_left = True
         elif key == arcade.key.RIGHT:
             self.turn_right = True
-        elif key == arcade.key.ESCAPE:
-            self.esc_pressed = True
 
     def on_key_release(self, key, modifiers):
         if key == arcade.key.W:
@@ -121,8 +127,30 @@ class GameView(arcade.View):
         emitter_data = find_emitters(self.world_map)
         self.entities = EntityManager(emitter_data, PORTAL_X, PORTAL_Y)
         self.phase = "maze"
+        self.won = False
         self.death_timer = 0.0
         self.win_timer = 0.0
+
+    def _set_phase(self, phase: str):
+        self.phase = phase
+        if phase == "bridge":
+            self.renderer.ceiling_color = COLOR_CEILING_BRIDGE
+            self.renderer.floor_color = COLOR_FLOOR_BRIDGE
+        else:
+            self.renderer.ceiling_color = COLOR_CEILING_MAZE
+            self.renderer.floor_color = COLOR_FLOOR_MAZE
+
+    def _check_triggers(self):
+        trigger = TRIGGERS.get((int(self.player.x), int(self.player.y)))
+        if trigger is None:
+            return
+        if trigger["action"] == "teleport":
+            self.player.x = trigger["x"]
+            self.player.y = trigger["y"]
+            self.player.angle = trigger["angle"]
+            self._set_phase(trigger["phase"])
+        elif trigger["action"] == "win":
+            self.won = True
 
     def on_update(self, delta_time):
         if self.esc_pressed:
@@ -135,7 +163,7 @@ class GameView(arcade.View):
             self.death_timer += delta_time
             return
 
-        if self.player.won:
+        if self.won:
             self.win_timer += delta_time
             return
 
@@ -150,14 +178,7 @@ class GameView(arcade.View):
         if not self.player.alive:
             return
 
-        # Check phase transition: door tile sets player.won, but we intercept for maze->bridge
-        if self.player.won and self.phase == "maze":
-            self.player.won = False
-            self.phase = "bridge"
-            # Teleport player to bridge entrance
-            self.player.x = 27.5
-            self.player.y = 20.5
-            self.player.angle = 1.5708  # facing south (positive Y)
+        self._check_triggers()
 
         hit, portal_touch = self.entities.update(
             delta_time, self.world_map, self.map_w, self.map_h,
@@ -167,28 +188,23 @@ class GameView(arcade.View):
         if hit:
             self.player.alive = False
 
-        if portal_touch:
-            self.player.won = True
-
-        # Update ceiling/floor colors based on player position
-        py_int = int(self.player.y)
-        if py_int >= 20:
-            self.renderer.ceiling_color = COLOR_CEILING_BRIDGE
-            self.renderer.floor_color = COLOR_FLOOR_BRIDGE
-        else:
-            self.renderer.ceiling_color = COLOR_CEILING_MAZE
-            self.renderer.floor_color = COLOR_FLOOR_MAZE
+        if portal_touch and self.phase == "bridge":
+            self.won = True
 
     def on_draw(self):
         self.clear()
 
-        ray_results = cast_rays(
+        dists, tiles, tex_xs, sides = cast_rays(
             self.player.x, self.player.y, self.player.angle,
             self.world_map, self.map_w, self.map_h,
         )
 
         self.renderer.clear()
-        self.renderer.draw_walls(ray_results)
+        self.renderer.draw_floor(
+            self.player.x, self.player.y, self.player.angle,
+            self.map_array, self.phase,
+        )
+        self.renderer.draw_walls(dists, tiles, tex_xs, sides)
 
         # Draw fireballs as sprites
         for fb in self.entities.fireballs:
@@ -226,7 +242,7 @@ class GameView(arcade.View):
             if self.death_timer > 0.5:
                 self._death_hint.draw()
 
-        if self.player.won:
+        if self.won:
             overlay = arcade.XYWH(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, SCREEN_WIDTH, SCREEN_HEIGHT)
             arcade.draw_rect_filled(overlay, (0, 0, 0, 150))
             self._win_title.draw()

@@ -14,6 +14,7 @@ Tile legend:
 
 from __future__ import annotations
 
+import math
 from enum import IntEnum
 
 
@@ -91,6 +92,20 @@ PLAYER_START_ANGLE = 0.0
 # Portal position: at the end of the bridge (bottom-left)
 PORTAL_X = 1.5
 PORTAL_Y = 32.5
+
+# Triggers fire when the player's center enters the tile. Actions:
+#   teleport: move the player and switch phase
+#   win: end the level
+TRIGGERS: dict[tuple[int, int], dict] = {
+    # Maze exit door: drop the player at the bridge entrance, facing south.
+    (27, 19): {
+        "action": "teleport",
+        "x": 27.5, "y": 20.5, "angle": math.pi / 2,
+        "phase": "bridge",
+    },
+    # Bridge-end door (also overlaps the portal sprite).
+    (1, 32): {"action": "win"},
+}
 
 # Emitter positions are auto-discovered from the map
 def find_emitters(level: list[list[int]]) -> list[tuple[int, int, int, int]]:

@@ -13,7 +13,6 @@ class Player:
         self.y = y
         self.angle = angle
         self.alive = True
-        self.won = False
 
     def update(
         self,
@@ -83,13 +82,6 @@ class Player:
         new_x = self.x + dx
         new_y = self.y + dy
 
-        # Check deadly tiles (chasm)
-        gx = int(new_x)
-        gy = int(new_y)
-        if self._is_deadly(gx, gy, world_map, map_w, map_h):
-            self.alive = False
-            return
-
         # Wall sliding: try full move, then each axis independently
         if not self._collides(new_x, new_y, r, world_map, map_w, map_h):
             self.x = new_x
@@ -99,12 +91,10 @@ class Player:
         elif not self._collides(self.x, new_y, r, world_map, map_w, map_h):
             self.y = new_y
 
-        # Check if standing on door tile
-        gx = int(self.x)
-        gy = int(self.y)
-        if 0 <= gx < map_w and 0 <= gy < map_h:
-            if world_map[gy][gx] == 5:
-                self.won = True
+        # Deadly tiles (chasm), checked where the player actually ended up
+        # after sliding, not at the requested position.
+        if self._is_deadly(int(self.x), int(self.y), world_map, map_w, map_h):
+            self.alive = False
 
     def _collides(
         self,

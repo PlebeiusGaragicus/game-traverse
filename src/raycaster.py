@@ -2,13 +2,9 @@
 
 import math
 
-from src.config import RENDER_WIDTH, FOV, HALF_FOV
+import numpy as np
 
-# Result tuple indices
-R_DIST = 0
-R_TILE = 1
-R_TEX_X = 2
-R_SIDE = 3  # 0 = E/W face, 1 = N/S face
+from src.config import RENDER_WIDTH, HALF_FOV
 
 
 def cast_rays(
@@ -18,17 +14,24 @@ def cast_rays(
     world_map: list[list[int]],
     map_w: int,
     map_h: int,
-) -> list[tuple[float, int, int, int]]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Cast RENDER_WIDTH rays from player position and return per-column hit info.
 
-    Returns list of (perp_distance, tile_id, tex_x_0_to_63, side).
+    Returns (perp_dist, tile_id, tex_x, side) arrays of length RENDER_WIDTH.
+    side is 0 for E/W faces, 1 for N/S faces. Columns with no hit have
+    tile_id 0 and perp_dist 1e30.
     """
-    results: list[tuple[float, int, int, int]] = []
+    dists = np.full(RENDER_WIDTH, 1e30, dtype=np.float64)
+    tiles = np.zeros(RENDER_WIDTH, dtype=np.intp)
+    tex_xs = np.zeros(RENDER_WIDTH, dtype=np.intp)
+    sides = np.zeros(RENDER_WIDTH, dtype=np.intp)
+
+    tan_hfov = math.tan(HALF_FOV)
 
     for col in range(RENDER_WIDTH):
         camera_x = 2.0 * col / RENDER_WIDTH - 1.0
-        ray_angle = angle + math.atan2(camera_x * math.tan(HALF_FOV), 1.0)
+        ray_angle = angle + math.atan2(camera_x * tan_hfov, 1.0)
 
         ray_dir_x = math.cos(ray_angle)
         ray_dir_y = math.sin(ray_angle)
@@ -87,7 +90,6 @@ def cast_rays(
                 break
 
         if not hit:
-            results.append((1e30, 0, 0, 0))
             continue
 
         if side == 0:
@@ -116,6 +118,9 @@ def cast_rays(
         if side == 1 and ray_dir_y < 0:
             tex_x = 63 - tex_x
 
-        results.append((perp_dist, tile_id, tex_x, side))
+        dists[col] = perp_dist
+        tiles[col] = tile_id
+        tex_xs[col] = tex_x
+        sides[col] = side
 
-    return results
+    return dists, tiles, tex_xs, sides

@@ -2,6 +2,8 @@
 
 import random
 
+import numpy as np
+
 from src.config import TEX_SIZE
 
 _RNG = random.Random(42)
@@ -192,11 +194,21 @@ def generate_portal_sprite() -> bytearray:
     return buf
 
 
+def _to_array(buf: bytearray, size: int) -> np.ndarray:
+    """Convert a flat RGBA bytearray to a (size, size, 4) uint8 array."""
+    return np.frombuffer(bytes(buf), dtype=np.uint8).reshape(size, size, 4)
+
+
 class TextureAtlas:
-    """Holds all generated textures, indexed by tile ID."""
+    """Holds all generated textures as numpy arrays.
+
+    `wall_stack` is a (n_tiles, TEX_SIZE, TEX_SIZE, 4) uint8 array indexed
+    by tile ID, so the renderer can gather texels for a whole frame with a
+    single fancy-index. Tile IDs without a texture are magenta (debug aid).
+    """
 
     def __init__(self):
-        self.wall_textures: dict[int, bytearray] = {
+        walls: dict[int, bytearray] = {
             1: generate_stone(),
             2: generate_brick(),
             3: generate_metal(),
@@ -204,19 +216,15 @@ class TextureAtlas:
             5: generate_door(),
             7: generate_emitter(),
         }
-        self.fireball_sprite = generate_fireball_sprite()
-        self.portal_sprite = generate_portal_sprite()
+        n_tiles = 9
+        self.wall_stack = np.zeros((n_tiles, TEX_SIZE, TEX_SIZE, 4), dtype=np.uint8)
+        self.wall_stack[..., 0] = 128
+        self.wall_stack[..., 2] = 128
+        self.wall_stack[..., 3] = 255
+        for tile_id, buf in walls.items():
+            self.wall_stack[tile_id] = _to_array(buf, TEX_SIZE)
+
+        self.fireball_sprite = _to_array(generate_fireball_sprite(), 32)
+        self.portal_sprite = _to_array(generate_portal_sprite(), 32)
         self.fireball_size = 32
         self.portal_size = 32
-
-    def get_wall(self, tile_id: int) -> bytearray | None:
-        return self.wall_textures.get(tile_id)
-
-    def sample_wall(self, tile_id: int, tex_x: int, tex_y: int) -> tuple[int, int, int, int]:
-        tex = self.wall_textures.get(tile_id)
-        if tex is None:
-            return (128, 0, 128, 255)
-        tx = tex_x & (TEX_SIZE - 1)
-        ty = tex_y & (TEX_SIZE - 1)
-        idx = (ty * TEX_SIZE + tx) * 4
-        return tex[idx], tex[idx + 1], tex[idx + 2], tex[idx + 3]

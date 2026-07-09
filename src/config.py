@@ -39,3 +39,9 @@ COLOR_FLOOR_MAZE = (90, 85, 80, 255)
 COLOR_CEILING_BRIDGE = (20, 10, 10, 255)
 COLOR_FLOOR_BRIDGE = (15, 10, 8, 255)
 COLOR_CHASM = (5, 2, 2, 255)
+
+# Floor tile colors for per-pixel floor casting (RGB only)
+COLOR_BRIDGE_FLOOR_A = (85, 70, 52)    # checker shade A (lighter)
+COLOR_BRIDGE_FLOOR_B = (65, 52, 38)    # checker shade B (darker)
+COLOR_CHASM_TILE = (5, 2, 2)           # near-black void
+COLOR_STONE_FLOOR_TILE = (70, 65, 60)  # gray stone (empty / door tiles)
