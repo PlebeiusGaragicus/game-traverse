@@ -28,7 +28,23 @@ TEX_SIZE = 64
 # Fireballs
 FIREBALL_SPEED = 2.5     # units/sec
 FIREBALL_RADIUS = 0.3    # collision radius
-EMITTER_COOLDOWN = 3.0   # seconds between spawns
+EMITTER_COOLDOWN = 3.0   # default seconds between spawns
+TELEGRAPH_SECONDS = 0.6  # emitter glows this long before firing
+FIREBALL_ANIM_FPS = 10.0
+
+# Health
+MAX_HEALTH = 3
+IFRAME_SECONDS = 1.0     # invulnerability window after a hit
+HIT_FLASH_SECONDS = 0.4  # red screen flash duration
+
+# Look / feel
+MOUSE_SENSITIVITY = 0.003   # radians per pixel of mouse motion
+BOB_FREQUENCY = 7.0         # head-bob cycles/sec while moving
+BOB_AMPLITUDE = 2.2         # head-bob amplitude in framebuffer pixels
+
+# Minimap
+MINIMAP_SCALE = 2        # framebuffer pixels per map tile
+MINIMAP_REVEAL = 3       # tiles revealed around the player (square radius)
 
 # ESC
 HOLD_TO_QUIT_SECONDS = 1.0

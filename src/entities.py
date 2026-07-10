@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import math
+from typing import Callable
 
-from src.config import FIREBALL_SPEED, FIREBALL_RADIUS, EMITTER_COOLDOWN
+from src.config import FIREBALL_SPEED, FIREBALL_RADIUS, EMITTER_COOLDOWN, TELEGRAPH_SECONDS
 from src.map_data import Tile
 
 
@@ -29,7 +29,7 @@ class Fireball:
             return
 
         cell = world_map[gy][gx]
-        if cell >= 1 and cell not in (Tile.EMPTY, Tile.BRIDGE, Tile.CHASM, Tile.DOOR):
+        if cell >= 1 and cell not in (Tile.BRIDGE, Tile.CHASM, Tile.DOOR):
             self.alive = False
 
     def hits_player(self, px: float, py: float) -> bool:
@@ -39,20 +39,35 @@ class Fireball:
 
 
 class Emitter:
-    __slots__ = ("gx", "gy", "dir_x", "dir_y", "cooldown", "timer")
+    __slots__ = ("gx", "gy", "dir_x", "dir_y", "period", "timer")
 
-    def __init__(self, gx: int, gy: int, dir_x: int, dir_y: int):
+    def __init__(
+        self,
+        gx: int,
+        gy: int,
+        dir_x: int,
+        dir_y: int,
+        period: float = EMITTER_COOLDOWN,
+        first_delay: float | None = None,
+    ):
         self.gx = gx
         self.gy = gy
         self.dir_x = dir_x
         self.dir_y = dir_y
-        self.cooldown = EMITTER_COOLDOWN
-        self.timer = EMITTER_COOLDOWN * 0.5  # stagger initial spawn
+        self.period = period
+        if first_delay is None:
+            first_delay = period * 0.5
+        self.timer = period - first_delay
+
+    @property
+    def telegraphing(self) -> bool:
+        """True while the emitter glows to warn of an imminent shot."""
+        return self.timer >= self.period - TELEGRAPH_SECONDS
 
     def update(self, dt: float) -> Fireball | None:
         self.timer += dt
-        if self.timer >= self.cooldown:
-            self.timer -= self.cooldown
+        if self.timer >= self.period:
+            self.timer -= self.period
             spawn_x = self.gx + 0.5 + self.dir_x * 0.6
             spawn_y = self.gy + 0.5 + self.dir_y * 0.6
             return Fireball(spawn_x, spawn_y, float(self.dir_x), float(self.dir_y))
@@ -81,10 +96,17 @@ class EntityManager:
         emitter_data: list[tuple[int, int, int, int]],
         portal_x: float,
         portal_y: float,
+        emitter_timing: dict[tuple[int, int], tuple[float, float]] | None = None,
     ):
-        self.emitters = [Emitter(gx, gy, dx, dy) for gx, gy, dx, dy in emitter_data]
+        timing = emitter_timing or {}
+        self.emitters = [
+            Emitter(gx, gy, dx, dy, *timing.get((gx, gy), (EMITTER_COOLDOWN, None)))
+            for gx, gy, dx, dy in emitter_data
+        ]
         self.fireballs: list[Fireball] = []
         self.portal = Portal(portal_x, portal_y)
+        # Called with the new fireball on spawn (used for positional audio).
+        self.on_spawn: Callable[[Fireball], None] | None = None
 
     def update(
         self,
@@ -100,12 +122,19 @@ class EntityManager:
             fb = emitter.update(dt)
             if fb is not None:
                 self.fireballs.append(fb)
+                if self.on_spawn is not None:
+                    self.on_spawn(fb)
+            # Swap the wall tile so the renderer shows the telegraph glow.
+            world_map[emitter.gy][emitter.gx] = (
+                Tile.EMITTER_HOT if emitter.telegraphing else Tile.EMITTER
+            )
 
         hit = False
         for fb in self.fireballs:
             fb.update(dt, world_map, map_w, map_h)
             if fb.alive and fb.hits_player(player_x, player_y):
                 hit = True
+                fb.alive = False
 
         self.fireballs = [fb for fb in self.fireballs if fb.alive]
 

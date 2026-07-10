@@ -27,14 +27,30 @@ from src.config import (
 from src.map_data import Tile
 from src.textures import TextureAtlas
 
-# Base floor color per tile ID for the bridge-phase floor caster.
+# Base floor color per tile ID for the floor caster.
 # Bridge (6) and chasm (8) get special handling; the rest use this LUT.
-_FLOOR_LUT = np.full((9, 3), (30, 25, 20), dtype=np.float64)
+_FLOOR_LUT = np.full((10, 3), (30, 25, 20), dtype=np.float64)
 _FLOOR_LUT[Tile.EMPTY] = COLOR_STONE_FLOOR_TILE
 _FLOOR_LUT[Tile.DOOR] = COLOR_STONE_FLOOR_TILE
 _FLOOR_LUT[Tile.CHASM] = COLOR_CHASM_TILE
 
 _OUT_OF_BOUNDS_COLOR = (5, 2, 2)
+
+# Minimap tile colors, indexed by tile ID
+_MINIMAP_LUT = np.array([
+    (70, 70, 70),     # empty
+    (135, 135, 135),  # stone
+    (150, 85, 60),    # brick
+    (110, 110, 128),  # metal
+    (140, 60, 30),    # lava
+    (200, 170, 60),   # door
+    (120, 95, 70),    # bridge
+    (230, 120, 30),   # emitter
+    (12, 6, 6),       # chasm
+    (255, 160, 40),   # emitter (hot)
+], dtype=np.uint8)
+_MINIMAP_UNSEEN = 14
+_MINIMAP_PLAYER = (255, 60, 60)
 
 
 class Renderer:
@@ -79,23 +95,28 @@ class Renderer:
         tan_hfov = math.tan(HALF_FOV)
         return cos_a, sin_a, -sin_a * tan_hfov, cos_a * tan_hfov
 
-    def clear(self):
-        """Fill the ceiling (top half). The floor half is drawn by draw_floor()."""
-        self.fb[: self.height // 2, :, :3] = self.ceiling_color[:3]
+    def _horizon_row(self, horizon: int) -> int:
+        """Screen row of the horizon; `horizon` is the head-bob pixel offset."""
+        return self.height // 2 + max(-8, min(8, horizon))
 
-    def draw_floor(self, player_x, player_y, player_angle, map_array, phase):
-        """Draw the floor (bottom half). Solid fill for maze, per-pixel cast for bridge."""
-        half = self.height // 2
+    def clear(self, horizon: int = 0):
+        """Fill the ceiling (above the horizon). Below it is drawn by draw_floor()."""
+        self.fb[: self._horizon_row(horizon), :, :3] = self.ceiling_color[:3]
 
-        if phase == "maze":
-            self.fb[half:, :, :3] = self.floor_color[:3]
+    def draw_floor(self, player_x, player_y, player_angle, map_array, floor_cast, horizon=0):
+        """Draw the floor below the horizon: solid fill, or per-pixel cast."""
+        hrow = self._horizon_row(horizon)
+
+        if not floor_cast:
+            self.fb[hrow:, :, :3] = self.floor_color[:3]
             return
 
         dir_x, dir_y, plane_x, plane_y = self._camera_basis(player_angle)
         map_h, map_w = map_array.shape
 
         # Horizontal distance to the floor point seen at each screen row.
-        p = np.maximum(1, np.arange(half, self.height) - half)
+        half = self.height // 2
+        p = np.maximum(1, np.arange(hrow, self.height) - hrow)
         row_dist = half / p  # (rows,)
 
         # World-space floor coordinates: outer product of row distance and
@@ -124,16 +145,17 @@ class Renderer:
         color *= factor[..., None]
 
         color[~in_bounds] = _OUT_OF_BOUNDS_COLOR
-        self.fb[half:, :, :3] = color.astype(np.uint8)
+        self.fb[hrow:, :, :3] = color.astype(np.uint8)
 
-    def draw_walls(self, dists, tiles, tex_xs, sides):
+    def draw_walls(self, dists, tiles, tex_xs, sides, horizon=0):
         """Draw textured wall columns from raycaster output arrays."""
         h = self.height
+        hrow = self._horizon_row(horizon)
         self.depth[:] = dists
 
         visible = (tiles > 0) & (dists < 1e29)
         line_h = np.where(visible, h / np.maximum(dists, 1e-3), 0).astype(np.int64)
-        start = h // 2 - line_h // 2  # may be negative when close to a wall
+        start = hrow - line_h // 2  # may be negative when close to a wall
 
         rel = self._ys - start[None, :]  # (h, w) pixel offset within the column
         mask = visible[None, :] & (rel >= 0) & (rel < line_h[None, :])
@@ -155,6 +177,7 @@ class Renderer:
         player_angle: float,
         sprite_data: np.ndarray,
         sprite_size: int,
+        horizon: int = 0,
     ):
         """Draw a billboarded sprite, depth-clipped per column against walls."""
         dir_x, dir_y, plane_x, plane_y = self._camera_basis(player_angle)
@@ -179,7 +202,7 @@ class Renderer:
             return
 
         start_x = screen_x - sprite_w // 2
-        start_y = h // 2 - sprite_h // 2
+        start_y = self._horizon_row(horizon) - sprite_h // 2
 
         xs = np.arange(max(0, start_x), min(w, start_x + sprite_w))
         ys = np.arange(max(0, start_y), min(h, start_y + sprite_h))
@@ -197,6 +220,20 @@ class Renderer:
         mask = (sample[..., 3] >= 128) & col_visible[None, :]
         region = self.fb[ys[0]:ys[-1] + 1, xs[0]:xs[-1] + 1, :3]
         region[mask] = sample[..., :3][mask]
+
+    def draw_minimap(self, map_array, visited, player_x, player_y, scale: int = 2):
+        """Composite a fog-of-war minimap into the framebuffer's top-right corner."""
+        colors = _MINIMAP_LUT[map_array.clip(0, 9)]
+        img = np.where(visited[..., None], colors, np.uint8(_MINIMAP_UNSEEN))
+        img = np.repeat(np.repeat(img, scale, axis=0), scale, axis=1)
+
+        pyi = int(player_y * scale)
+        pxi = int(player_x * scale)
+        img[max(0, pyi - 1):pyi + 1, max(0, pxi - 1):pxi + 1] = _MINIMAP_PLAYER
+
+        hgt, wid = img.shape[:2]
+        x0 = self.width - wid - 3
+        self.fb[3:3 + hgt, x0:x0 + wid, :3] = img
 
     def upload_and_draw(self):
         """Upload framebuffer to GPU and draw scaled to screen."""

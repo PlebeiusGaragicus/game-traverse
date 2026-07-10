@@ -114,34 +114,45 @@ def generate_door() -> bytearray:
     return buf
 
 
-def generate_emitter() -> bytearray:
-    """Dark wall with a glowing orange emitter hole in the center."""
+def generate_emitter(hot: bool = False) -> bytearray:
+    """Dark wall with a glowing orange emitter hole in the center.
+
+    The hot variant has a larger, brighter glow: emitters swap to it while
+    telegraphing an imminent shot.
+    """
     buf = generate_metal()
     cx, cy = TEX_SIZE // 2, TEX_SIZE // 2
+    glow_sq = 144 if hot else 64
     for y in range(TEX_SIZE):
         for x in range(TEX_SIZE):
             dx = x - cx
             dy = y - cy
             dist_sq = dx * dx + dy * dy
-            if dist_sq < 64:
-                t = dist_sq / 64
-                r = int(255 * (1 - t) + 100 * t)
-                g = int(140 * (1 - t) + 40 * t)
+            if dist_sq < glow_sq:
+                t = dist_sq / glow_sq
+                if hot:
+                    r = int(255 * (1 - t) + 180 * t)
+                    g = int(220 * (1 - t) + 80 * t)
+                else:
+                    r = int(255 * (1 - t) + 100 * t)
+                    g = int(140 * (1 - t) + 40 * t)
                 _set_pixel(buf, x, y, _clamp(r), _clamp(g), 10)
     return buf
 
 
-def generate_fireball_sprite() -> bytearray:
-    """32x32 radial gradient fireball, stored as 32x32 RGBA."""
+def generate_fireball_sprite(scale: float = 1.0, jitter: int = 0) -> bytearray:
+    """32x32 radial gradient fireball. scale/jitter vary the flicker frames."""
     size = 32
     buf = bytearray(size * size * 4)
     cx, cy = size // 2, size // 2
-    max_r = size // 2
+    max_r = (size // 2) * scale
     for y in range(size):
         for x in range(size):
             dx = x - cx
             dy = y - cy
             dist = (dx * dx + dy * dy) ** 0.5
+            if jitter:
+                dist += _RNG.randint(-jitter, jitter) * 0.4
             if dist > max_r:
                 idx = (y * size + x) * 4
                 buf[idx] = 0
@@ -149,7 +160,7 @@ def generate_fireball_sprite() -> bytearray:
                 buf[idx + 2] = 0
                 buf[idx + 3] = 0
             else:
-                t = dist / max_r
+                t = max(0.0, min(1.0, dist / max_r))
                 r = int(255 * (1 - t * 0.3))
                 g = int(200 * (1 - t * 0.7))
                 b = int(50 * (1 - t))
@@ -215,8 +226,9 @@ class TextureAtlas:
             4: generate_lava_rock(),
             5: generate_door(),
             7: generate_emitter(),
+            9: generate_emitter(hot=True),  # telegraphing emitter
         }
-        n_tiles = 9
+        n_tiles = 10
         self.wall_stack = np.zeros((n_tiles, TEX_SIZE, TEX_SIZE, 4), dtype=np.uint8)
         self.wall_stack[..., 0] = 128
         self.wall_stack[..., 2] = 128
@@ -224,7 +236,12 @@ class TextureAtlas:
         for tile_id, buf in walls.items():
             self.wall_stack[tile_id] = _to_array(buf, TEX_SIZE)
 
-        self.fireball_sprite = _to_array(generate_fireball_sprite(), 32)
+        # Flicker frames cycled by the game clock
+        self.fireball_frames = [
+            _to_array(generate_fireball_sprite(1.0), 32),
+            _to_array(generate_fireball_sprite(0.9, jitter=2), 32),
+            _to_array(generate_fireball_sprite(1.05, jitter=1), 32),
+        ]
         self.portal_sprite = _to_array(generate_portal_sprite(), 32)
         self.fireball_size = 32
         self.portal_size = 32

@@ -2,12 +2,20 @@
 
 ## Overview
 
-Retro Wolfenstein-style raycaster FPS in two phases:
+Retro Wolfenstein-style raycaster FPS across three levels:
 
-1. **Maze**: navigate a grid-based maze to find the exit door
-2. **Bridge**: traverse a narrow path over a chasm dodging fireballs from wall emitters
+1. **The Maze**: navigate a grid maze to the exit door, then cross a bridge
+   over a chasm (two phases, checkpoint at the transition)
+2. **The Gauntlet**: serpentine corridors, each swept by an emitter; dodge
+   into alcoves or outrun the fireballs
+3. **The Crossing**: branching bridges over an open chasm with emitter
+   pillars firing across the paths
 
-Win: reach the portal at the bridge's far end. Death: fireball hit or falling off the bridge.
+Touching a level's portal advances to the next (wins on the last). The player
+has 3 hearts with a brief invulnerability window per hit; falling into the
+chasm is instant death. Death respawns at the current checkpoint. Emitters
+glow (texture swap 7<->9) for 0.6s before firing, and all sound effects are
+synthesized at startup via pyglet (no audio assets).
 
 ## Rendering
 
@@ -31,4 +39,6 @@ auto-discovered from the grid and fire toward the adjacent walkable tile.
 
 ## Controls
 
-WASD move/strafe, arrows turn, ESC hold to quit. No vertical look.
+WASD move/strafe, mouse or arrows turn (exclusive mouse capture during play),
+TAB toggles a fog-of-war minimap, ESC hold to quit. No vertical look; head
+bob offsets the horizon a few pixels while moving.
