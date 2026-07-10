@@ -5,7 +5,8 @@ before touching code. `design.md` covers the player-facing design.
 
 ## Run / test / verify
 
-- Play: `../../run` (repo-root script) or `../../.venv/bin/python src/main.py` from this dir.
+- Play: `../../run traverse` (repo-root script; no-arg `../../run` starts the Landus
+  launcher UI instead) or `../../.venv/bin/python src/main.py` from this dir.
 - Parent venv pip shebang is BROKEN (repo was moved); always `.venv/bin/python -m pip`, never `.venv/bin/pip`.
 - Level validation: `../../.venv/bin/python tests/test_levels.py` — run after ANY map/level edit.
 - macOS `screencapture` lacks permission. To see the live game, run it and capture in-process:
