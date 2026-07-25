@@ -95,6 +95,19 @@ Keep them in sync if adding tiles. Raycaster wall test: `cell >= 1 and cell not 
   the launcher's interpreter.
 - This is a git submodule; commit here first, then bump pointer in parent repo.
 
+## Tests
+
+```bash
+.venv/bin/python tests/test_levels.py        # level data validation (pure)
+.venv/bin/python tests/test_playthrough.py   # real GameView, invariants
+.venv/bin/python tests/test_screens.py       # renders every state to tests/screenshots/
+```
+
+`tests/harness.py` opens the real window and steps update+draw. It uses
+ARCADE_HEADLESS (EGL) where available -- the Debian cabinet -- and falls back to
+a real window on macOS, where EGL does not exist. Screenshots come from the real
+framebuffer, so they are what a player sees; open them and look.
+
 ## Known gaps / natural next steps
 
 - No cover art; the launcher shows a procedural placeholder. Add
