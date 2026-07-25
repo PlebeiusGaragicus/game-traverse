@@ -86,14 +86,19 @@ Keep them in sync if adding tiles. Raycaster wall test: `cell >= 1 and cell not 
 
 ## Landus integration
 
-- game.json: entry `python src/main.py`, cover_art assets/cover.png (MISSING — not yet made),
-  theme_song null. LANDUS_FULLSCREEN=1 env var → fullscreen (main.py).
+- game.json: entry `python src/main.py`, theme_song null, no cover_art key — the
+  launcher draws a procedural cover. Re-add cover_art only once the file exists;
+  the launcher's tests assert every declared asset path resolves.
+- LANDUS_FULLSCREEN=1 env var → fullscreen (main.py). The launcher always sets it.
+- Dependencies come from this repo's own `.venv`, provisioned by the parent's
+  `./setup`. Per-game venvs: the launcher runs `.venv/bin/python` from here, not
+  the launcher's interpreter.
 - This is a git submodule; commit here first, then bump pointer in parent repo.
-  Parent repo has unrelated dirty files (process_manager.py, watchdog.py, docs/) — never stage them.
 
 ## Known gaps / natural next steps
 
-- No cover art (game.json points at missing assets/cover.png).
+- No cover art; the launcher shows a procedural placeholder. Add
+  `assets/cover.png` plus the `cover_art` key together.
 - No score/best-time tracking; win screen just returns to title.
 - Emitter fire sound plays for ALL spawns each frame loop (fine at current emitter counts).
 - Fireballs don't collide with each other or the player's movement (only radius check).
